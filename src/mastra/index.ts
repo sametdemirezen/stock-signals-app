@@ -5,9 +5,10 @@ import { DuckDBStore } from "@mastra/duckdb";
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { newsSentimentAgent } from './agents/news-sentiment-agent';
+import { technicalAnalystAgent } from './agents/technical-analyst-agent';
 
 export const mastra = new Mastra({
-  agents: { newsSentimentAgent},
+  agents: { newsSentimentAgent, technicalAnalystAgent},
   storage: new MastraCompositeStore({
     id: 'composite-storage',
     default: new LibSQLStore({
