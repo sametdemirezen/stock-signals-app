@@ -4,11 +4,10 @@ import { LibSQLStore, MemoryLibSQL } from '@mastra/libsql';
 import { DuckDBStore } from "@mastra/duckdb";
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
-
-import { stockPriceAgent } from './agents/stock-price-agent';
+import { newsSentimentAgent } from './agents/news-sentiment-agent';
 
 export const mastra = new Mastra({
-  agents: { stockPriceAgent },
+  agents: { newsSentimentAgent},
   storage: new MastraCompositeStore({
     id: 'composite-storage',
     default: new LibSQLStore({

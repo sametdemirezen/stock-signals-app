@@ -19,10 +19,8 @@ export const stockNewsTool = createTool({
     ticker: z.string().describe('Stock ticker symbol, e.g. AAPL'),
     daysBack: z
       .number()
-      .min(1)
-      .max(7)
       .default(2)
-      .describe('How many days back to fetch news for (1-7).'),
+      .describe('How many days back to fetch news for (typically 1-7).'),
   }),
 
   outputSchema: z.object({
@@ -40,7 +38,7 @@ export const stockNewsTool = createTool({
   }),
 
   execute: async (inputData) => {
-    const { ticker, daysBack } = inputData;
+  const { ticker, daysBack = 2 } = inputData;
 
     const apiKey = process.env.FINNHUB_API_KEY;
     if (!apiKey) {
