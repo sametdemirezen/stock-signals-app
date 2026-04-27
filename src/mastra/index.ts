@@ -6,9 +6,10 @@ import { MastraCompositeStore } from '@mastra/core/storage';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { newsSentimentAgent } from './agents/news-sentiment-agent';
 import { technicalAnalystAgent } from './agents/technical-analyst-agent';
+import { synthesizerAgent } from './agents/synthesizer-agent';
 
 export const mastra = new Mastra({
-  agents: { newsSentimentAgent, technicalAnalystAgent},
+  agents: { newsSentimentAgent, technicalAnalystAgent, synthesizerAgent },
   storage: new MastraCompositeStore({
     id: 'composite-storage',
     default: new LibSQLStore({
