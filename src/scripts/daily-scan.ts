@@ -51,11 +51,14 @@ async function main() {
   console.log('   DAILY MARKET SCAN');
   console.log('══════════════════════════════════════════\n');
 
-  const scanList = await buildScanList({ scannerTopN: 15 });
-  //const tickers = scanList.combined; &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&TESTING SLICE &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& 
+  // === MODE: pick one, comment the other ===
+  //const scanList = await buildScanList({ scannerTopN: 15 });           // FULL: watchlist + S&P 500 scanner (~10 min)
+  const scanList = await buildScanList({ skipScanner: true });      // FAST: watchlist only (~3-4 min)
+  //&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&TESTING SLICE &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& 
+  const tickers = scanList.combined; 
   // Test mode: only run on the first 4 tickers (2 batches x 2 = ~2 min total).
 // Remove this slice for full daily runs.
-  const tickers = scanList.combined.slice(0, 4);
+  //const tickers = scanList.combined.slice(0, 4);
 
   console.log(`\nAnalyzing ${tickers.length} tickers in batches of ${BATCH_SIZE}...\n`);
 

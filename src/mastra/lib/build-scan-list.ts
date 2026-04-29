@@ -1,16 +1,5 @@
 import { scanMarket, type ScanCandidate } from './scanner';
 
-/**
- * Build the final list of tickers to analyze each morning.
- *
- * Combines:
- *   1. The user's static WATCHLIST from .env (always analyzed)
- *   2. Top movers from the daily market scanner (dynamic)
- *
- * Watchlist tickers always pass through; scanner candidates are
- * de-duplicated against the watchlist so we don't analyze the same
- * stock twice. The result is a clean, ordered list.
- */
 export interface ScanListResult {
   watchlist: string[];
   scannerHits: ScanCandidate[];
@@ -18,10 +7,6 @@ export interface ScanListResult {
   combined: string[];
 }
 
-/**
- * Read WATCHLIST from environment. Returns empty array if unset.
- * Tickers are uppercased and trimmed for safety.
- */
 function readWatchlist(): string[] {
   const raw = process.env.WATCHLIST ?? '';
   return raw
@@ -32,20 +17,35 @@ function readWatchlist(): string[] {
 
 export async function buildScanList(opts: {
   scannerTopN?: number;
+  /**
+   * If true, skips the full S&P 500 scan and returns only the watchlist.
+   * Use this for quick local runs (~watchlist size analysis) instead of
+   * the full daily scan that adds scanner-discovered tickers.
+   */
+  skipScanner?: boolean;
 } = {}): Promise<ScanListResult> {
-  const { scannerTopN = 15 } = opts;
+  const { scannerTopN = 15, skipScanner = false } = opts;
 
   const watchlist = readWatchlist();
   console.log(`Watchlist: ${watchlist.length} tickers`);
 
-  // Run the scanner. We don't pass a `universe`, so it uses full S&P 500.
+  // Fast path: watchlist-only mode. No network calls beyond what the
+  // multi-agent pipeline will already make.
+  if (skipScanner) {
+    console.log('Scanner skipped (watchlist-only mode).');
+    return {
+      watchlist,
+      scannerHits: [],
+      combined: [...watchlist],
+    };
+  }
+
   console.log('Running market scanner on full S&P 500...');
   const t0 = Date.now();
   const scannerHits = await scanMarket({ topN: scannerTopN });
   console.log(`Scanner finished in ${((Date.now() - t0) / 1000).toFixed(1)}s, ${scannerHits.length} hits.`);
 
-  // Deduplicate. Watchlist comes first; scanner hits append only if not
-  // already in the watchlist. A Set tracks what we've seen.
+  // Dedupe: watchlist first, then scanner hits if not already present.
   const seen = new Set<string>();
   const combined: string[] = [];
 
