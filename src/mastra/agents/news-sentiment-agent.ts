@@ -91,6 +91,6 @@ export const newsSentimentAgent = new Agent({
       original form.
   `,
 
-  model: 'anthropic/claude-sonnet-4-5',
+  model: 'anthropic/claude-haiku-4-5',
   tools: { stockNewsTool },
 });

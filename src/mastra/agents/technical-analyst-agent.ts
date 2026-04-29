@@ -115,6 +115,6 @@ export const technicalAnalystAgent = new Agent({
       indicator names (RSI, MACD, SMA50) in their original form
   `,
 
-  model: 'anthropic/claude-sonnet-4-5',
+  model: 'anthropic/claude-haiku-4-5',
   tools: { technicalAnalysisTool },
 });
