@@ -1,0 +1,47 @@
+# Daily market scan — runs every weekday morning before US market open.
+# Triggers the multi-agent pipeline and pushes signals to Telegram.
+
+name: Daily Market Scan
+
+# When to run
+on:
+  # Cron schedule. Times are UTC.
+  # 13:00 UTC = 09:00 ET = 30 minutes before NYSE open.
+  # Mon-Fri only ('1-5' in the day-of-week field).
+  schedule:
+    - cron: '0 13 * * 1-5'
+
+  # Also allow manual triggering from the GitHub Actions UI.
+  # Useful for testing or running off-schedule.
+  workflow_dispatch:
+
+jobs:
+  scan:
+    name: Run multi-agent scan
+    runs-on: ubuntu-latest
+
+    # GitHub kills jobs that run too long. Our scan takes ~10 min,
+    # but we cap at 30 to be safe (rate limits, network hiccups).
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run daily scan
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          WATCHLIST: ${{ secrets.WATCHLIST }}
+        run: npx tsx src/scripts/daily-scan.ts
