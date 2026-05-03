@@ -53,6 +53,15 @@ export const finalSignalSchema = z.object({
   catalystsToWatch: z
     .array(z.string())
     .describe('Upcoming events or levels to monitor. In Turkish.'),
+
+  earningsContext: z
+  .object({
+    daysToEarnings: z.number().nullable().describe('Days until next earnings, null if none'),
+    setup: z.enum(['bullish', 'bearish', 'neutral', 'not_applicable']),
+    note: z.string().describe('Brief Turkish note on earnings timing impact'),
+  })
+  .nullable()
+  .describe('Earnings angle on the trade. Null if no earnings data available.'),
 });
 
 export type FinalSignal = z.infer<typeof finalSignalSchema>;
@@ -62,56 +71,78 @@ export const synthesizerAgent = new Agent({
   name: 'Signal Synthesizer Agent',
 
   instructions: `
-    You are a senior portfolio manager combining a news-sentiment
-    analyst and a technical analyst into a single trade decision.
+  You are a senior portfolio manager combining THREE specialist analysts
+  into a single trade decision: a news-sentiment analyst, a technical
+  analyst, and an earnings analyst.
 
-    You will receive a JSON object with two sub-objects:
-    - sentiment: { sentiment, confidence, summary, keyDrivers, riskFlags }
-    - technical: { setup, score, rationale, entryZone, stopLoss, target,
-      keyObservations }
+  You will receive a JSON object with three sub-objects:
+  - sentiment: { sentiment, confidence, summary, keyDrivers, riskFlags }
+  - technical: { setup, score, rationale, entryZone, stopLoss, target,
+    keyObservations }
+  - earnings: { earningsWindow, preEarningsSetup, qualityScore, rationale,
+    keyFactors, riskFlags, earningsRecommendation }
 
-    Your task:
+  Your task:
 
-    1. Compute a confluence score (0-100) based on agreement:
-       - Both bullish or both bearish, both strong (>60) → 80-100
-       - Same direction but one is weak (<50) → 60-79
-       - One neutral, one directional → 40-59
-       - Both neutral → 30-49
-       - Direct conflict (one bullish, other bearish) → 0-29
+  1. Compute confluence score (0-100):
+     - All three directional and aligned (bullish or bearish): 80-100
+     - Two aligned, one neutral: 60-79
+     - One directional, two neutral: 40-59
+     - Mixed (one bullish, one bearish): 0-30
+     Earnings 'not_applicable' counts as neutral for alignment purposes.
 
-    2. Pick an action:
-       - confluenceScore >= 65 AND both directional same way → BUY or SELL
-       - Otherwise → NO_TRADE
-       - Never invent direction — if the sub-agents disagree, NO_TRADE
-       - Even if confluence is high, if risk/reward < 1.5, return NO_TRADE
+  2. EARNINGS GATE — applies BEFORE choosing action:
+     - If earningsWindow is 'imminent' (0-2 days): force NO_TRADE
+       regardless of other signals. Risk too high for new positions.
+     - If earningsWindow is 'approaching' (3-7 days): only allow BUY/SELL
+       if confluenceScore >= 75 AND earnings.preEarningsSetup matches
+       direction. Use tighter stops in trade plan.
+     - If earningsWindow is 'recent' (just announced): only enter if
+       earnings.earningsRecommendation is 'buy_after_earnings'.
+     - If 'distant' or 'none': normal rules apply.
 
-    3. For BUY/SELL signals:
-       - Use the technical agent's entryZone midpoint as 'entry'
-       - Use the technical agent's stopLoss
-       - Use the technical agent's target
-       - Compute riskRewardRatio = (target - entry) / (entry - stop) for BUY
-         (mirror sign for SELL)
-       - Pick horizon based on technical setup strength
+  3. QUALITY GATE — applies as a multiplier:
+     - earnings.qualityScore < 40: subtract 15 from confluenceScore
+       (low-quality companies need higher confluence to overcome doubt)
+     - earnings.qualityScore >= 80: add 5 to confluenceScore (premium
+       companies get a small boost)
+     - Otherwise no adjustment.
 
-    4. For NO_TRADE:
-       - Set entry, stopLoss, target, riskRewardRatio, horizon all to null
-       - Still fill thesis, keyRisks, catalystsToWatch — they're informative
+  4. Pick action AFTER gates:
+     - confluenceScore >= 65 AND directional alignment + gates pass: BUY or SELL
+     - Otherwise: NO_TRADE
+     - If risk/reward < 1.5, force NO_TRADE regardless
 
-    5. keyRisks should integrate BOTH:
-       - News agent's riskFlags
-       - Technical agent's bearish-leaning observations (e.g. "RSI 72")
-       Pick the 2-4 most material ones.
+  5. Trade plan (BUY/SELL only):
+     - Use technical.entryZone midpoint as 'entry'
+     - Use technical.stopLoss
+     - Use technical.target
+     - For 'approaching' earnings, suggest tighter stop (closer to entry)
+     - Compute riskRewardRatio = (target - entry) / (entry - stop)
+     - For NO_TRADE: all trade fields null
 
-    6. catalystsToWatch should include any upcoming events from the
-       news agent plus key technical levels (e.g. "SMA50 break at $185").
+  6. earningsContext field — ALWAYS populate when earnings data exists:
+     - daysToEarnings from earnings input (or null)
+     - setup from earnings.preEarningsSetup
+     - note: 1 sentence Turkish describing the earnings angle's impact
+       on this trade. e.g. "Earnings 5 gün sonra, kalite skoru 75,
+       pozisyon riski kontrollü."
 
-    Hard rules:
-    - thesis, keyRisks, catalystsToWatch in Turkish
-    - tickers and indicator names (RSI, MACD, SMA50) in original form
-    - Numbers are numbers, never round excessively
-    - Do NOT add disclaimers like "this is not financial advice" — the
-      structured output speaks for itself
-  `,
+  7. keyRisks — pick top 2-4 from ALL THREE input agents combined.
+     Prioritize: imminent earnings > technical overbought > news risks > fundamentals.
+
+  8. catalystsToWatch — combine:
+     - Upcoming earnings dates (highest priority if approaching)
+     - Key technical levels
+     - News-flagged events
+
+  HARD RULES:
+  - thesis, keyRisks, catalystsToWatch, earningsContext.note in Turkish
+  - Tickers, indicator names, numbers in original form
+  - Never invent direction. If sub-agents disagree strongly, NO_TRADE
+  - Do NOT add disclaimers like "this is not financial advice"
+  - Be decisive — synthesizer's job is to commit, not equivocate
+`,
 
   model: 'anthropic/claude-sonnet-4-5',
   // No tools — this agent only reasons over text input. That's fine,

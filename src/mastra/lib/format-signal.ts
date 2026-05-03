@@ -38,6 +38,20 @@ export function formatSignalForTelegram(sig: FinalSignal): string {
     }
   }
 
+  // Earnings context — if available
+if (sig.earningsContext) {
+  lines.push('');
+  lines.push('<b>📅 Earnings</b>');
+  if (sig.earningsContext.daysToEarnings !== null) {
+    const days = sig.earningsContext.daysToEarnings;
+    const setupLabel = sig.earningsContext.setup === 'not_applicable'
+      ? '-'
+      : sig.earningsContext.setup;
+    lines.push(`<code>${days} gün kaldı  •  setup: ${setupLabel}</code>`);
+  }
+  lines.push(`<i>${escapeHtml(sig.earningsContext.note)}</i>`);
+}
+
   // Risks — keep it to top 2 to avoid wall-of-text
   if (sig.keyRisks.length > 0) {
     lines.push('');
