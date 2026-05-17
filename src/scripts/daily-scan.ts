@@ -57,15 +57,79 @@ async function analyzeTicker(ticker: string): Promise<FinalSignal | null> {
       { structuredOutput: { schema: finalSignalSchema } },
     );
 
-    // Apply deterministic post-processing rules.
-    // LLM produces a candidate decision; code enforces math + thresholds.
-    return enforceTradeRules(synthResult.object);
+    // Compute mean confidence from directional sub-agents.
+    // "Directional" means the agent is not neutral / not_applicable.
+    const confidenceValues: number[] = [];
+    if (newsResult.object.sentiment !== "neutral") {
+      confidenceValues.push(newsResult.object.confidence);
+    }
+    if (techResult.object.setup !== "neutral") {
+      confidenceValues.push(techResult.object.score);
+    }
+    if (
+      earningsResult.object.preEarningsSetup !== "neutral" &&
+      earningsResult.object.preEarningsSetup !== "not_applicable"
+    ) {
+      confidenceValues.push(earningsResult.object.qualityScore);
+    }
+    const meanConfidence =
+      confidenceValues.length > 0
+        ? confidenceValues.reduce((a, b) => a + b, 0) / confidenceValues.length
+        : 0;
+
+    console.log(`\n[DEBUG ${ticker}] Synthesizer raw output:`);
+    console.log(`  action: ${synthResult.object.action}`);
+    console.log(`  alignment: ${synthResult.object.agentAlignment}`);
+    console.log(`  mean confidence (computed): ${meanConfidence.toFixed(1)}`);
+    console.log(
+      `  LLM confluence (will be overwritten): ${synthResult.object.confluenceScore}`,
+    );
+    console.log(`  entry: ${synthResult.object.entry}`);
+    console.log(`  stopLoss: ${synthResult.object.stopLoss}`);
+    console.log(`  target: ${synthResult.object.target}`);
+    console.log(`  R:R (LLM): ${synthResult.object.riskRewardRatio}`);
+    const enforced = enforceTradeRules(synthResult.object, meanConfidence);
+    console.log(
+      `  → after enforce: ${enforced.action}, confluence: ${enforced.confluenceScore}, R:R: ${enforced.riskRewardRatio}`,
+    );
+    return enforced;
   } catch (err) {
     console.error(`  ✗ ${ticker} failed:`, (err as Error).message);
     return null;
   }
 }
 
+/**
+ * Compute confluence score deterministically.
+ *
+ * Two inputs:
+ *   - alignment: categorical decision by the LLM (which it does reliably)
+ *   - meanConfidence: numeric average computed from sub-agent outputs
+ *
+ * The confidence band (strong/moderate/weak) is derived in code from
+ * meanConfidence, NOT by the LLM. Same inputs always produce the same
+ * score, run to run.
+ */
+function computeConfluenceScore(
+  alignment: FinalSignal["agentAlignment"],
+  meanConfidence: number,
+): number {
+  const confidence: "strong" | "moderate" | "weak" =
+    meanConfidence > 70 ? "strong" : meanConfidence >= 50 ? "moderate" : "weak";
+
+  const table: Record<
+    FinalSignal["agentAlignment"],
+    Record<"strong" | "moderate" | "weak", number>
+  > = {
+    all_three_aligned: { strong: 90, moderate: 75, weak: 60 },
+    two_directional_one_neutral: { strong: 75, moderate: 65, weak: 50 },
+    one_directional_two_neutral: { strong: 50, moderate: 40, weak: 30 },
+    all_neutral: { strong: 35, moderate: 30, weak: 25 },
+    mixed_conflicting: { strong: 20, moderate: 15, weak: 10 },
+  };
+
+  return table[alignment][confidence];
+}
 /**
  * Post-process the synthesizer's output to enforce deterministic rules.
  *
@@ -74,7 +138,16 @@ async function analyzeTicker(ticker: string): Promise<FinalSignal | null> {
  * below threshold. This catches cases where the LLM produced a "BUY with
  * R:R 2.0" decision but the actual math says R:R was 0.5.
  */
-function enforceTradeRules(signal: FinalSignal): FinalSignal {
+function enforceTradeRules(
+  signal: FinalSignal,
+  meanConfidence: number,
+): FinalSignal {
+  // Recompute confluence deterministically.
+  const computedConfluence = computeConfluenceScore(
+    signal.agentAlignment,
+    meanConfidence,
+  );
+  signal = { ...signal, confluenceScore: computedConfluence };
   // Only need post-processing for actionable signals.
   // NO_TRADE doesn't have entry/stop/target to validate.
   if (signal.action === "NO_TRADE") {

@@ -1,5 +1,5 @@
-import { Agent } from '@mastra/core/agent';
-import { z } from 'zod';
+import { Agent } from "@mastra/core/agent";
+import { z } from "zod";
 
 /**
  * Output schema for the synthesizer agent.
@@ -13,23 +13,37 @@ export const finalSignalSchema = z.object({
   ticker: z.string(),
 
   action: z
-    .enum(['BUY', 'SELL', 'NO_TRADE'])
-    .describe('Final recommendation. NO_TRADE when signals conflict or are weak.'),
+    .enum(["BUY", "SELL", "NO_TRADE"])
+    .describe(
+      "Final recommendation. NO_TRADE when signals conflict or are weak.",
+    ),
+  agentAlignment: z
+    .enum([
+      "all_three_aligned",
+      "two_directional_one_neutral",
+      "one_directional_two_neutral",
+      "all_neutral",
+      "mixed_conflicting",
+    ])
+    .describe(
+      "Categorical assessment of how the three sub-agents agree. " +
+        'Earnings "not_applicable" counts as neutral for this purpose.',
+    ),
 
   confluenceScore: z
     .number()
     .describe(
-      'Final 0-100 score reflecting how aligned the inputs are. ' +
-        '75-100: news + technical strongly agree. ' +
-        '55-74: agreement with caveats. ' +
-        '0-54: conflict, missing data, or weak signals — should be NO_TRADE.',
+      "Final 0-100 score reflecting how aligned the inputs are. " +
+        "75-100: news + technical strongly agree. " +
+        "55-74: agreement with caveats. " +
+        "0-54: conflict, missing data, or weak signals — should be NO_TRADE.",
     ),
 
   thesis: z
     .string()
     .describe(
-      'A 2-3 sentence Turkish summary explaining the recommendation. ' +
-        'Reference both the news and technical inputs.',
+      "A 2-3 sentence Turkish summary explaining the recommendation. " +
+        "Reference both the news and technical inputs.",
     ),
 
   entry: z.number().nullable(),
@@ -39,36 +53,41 @@ export const finalSignalSchema = z.object({
   riskRewardRatio: z
     .number()
     .nullable()
-    .describe('Computed (target - entry) / (entry - stop) for BUY signals.'),
+    .describe("Computed (target - entry) / (entry - stop) for BUY signals."),
 
   horizon: z
-    .enum(['few days', '1-2 weeks', '2-4 weeks'])
+    .enum(["few days", "1-2 weeks", "2-4 weeks"])
     .nullable()
-    .describe('Expected holding period. Null when action is NO_TRADE.'),
+    .describe("Expected holding period. Null when action is NO_TRADE."),
 
   keyRisks: z
     .array(z.string())
-    .describe('Concrete things that would invalidate the thesis. In Turkish.'),
+    .describe("Concrete things that would invalidate the thesis. In Turkish."),
 
   catalystsToWatch: z
     .array(z.string())
-    .describe('Upcoming events or levels to monitor. In Turkish.'),
+    .describe("Upcoming events or levels to monitor. In Turkish."),
 
   earningsContext: z
-  .object({
-    daysToEarnings: z.number().nullable().describe('Days until next earnings, null if none'),
-    setup: z.enum(['bullish', 'bearish', 'neutral', 'not_applicable']),
-    note: z.string().describe('Brief Turkish note on earnings timing impact'),
-  })
-  .nullable()
-  .describe('Earnings angle on the trade. Null if no earnings data available.'),
+    .object({
+      daysToEarnings: z
+        .number()
+        .nullable()
+        .describe("Days until next earnings, null if none"),
+      setup: z.enum(["bullish", "bearish", "neutral", "not_applicable"]),
+      note: z.string().describe("Brief Turkish note on earnings timing impact"),
+    })
+    .nullable()
+    .describe(
+      "Earnings angle on the trade. Null if no earnings data available.",
+    ),
 });
 
 export type FinalSignal = z.infer<typeof finalSignalSchema>;
 
 export const synthesizerAgent = new Agent({
-  id: 'synthesizer-agent',
-  name: 'Signal Synthesizer Agent',
+  id: "synthesizer-agent",
+  name: "Signal Synthesizer Agent",
 
   instructions: `
   You are a senior portfolio manager combining THREE specialist analysts
@@ -84,12 +103,16 @@ export const synthesizerAgent = new Agent({
 
   Your task:
 
-  1. Compute confluence score (0-100):
-     - All three directional and aligned (bullish or bearish): 80-100
-     - Two aligned, one neutral: 60-79
-     - One directional, two neutral: 40-59
-     - Mixed (one bullish, one bearish): 0-30
-     Earnings 'not_applicable' counts as neutral for alignment purposes.
+  1. Categorize ALIGNMENT — pick one:
+    - "all_three_aligned": all three agents same direction (all bullish
+     OR all bearish). Earnings 'not_applicable' counts as neutral, so
+     this requires sentiment+technical aligned AND earnings either also
+     aligned OR earnings irrelevant.
+    - "two_directional_one_neutral": exactly 2 directional agents
+     pointing the same way, 1 agent neutral or not_applicable
+   - "one_directional_two_neutral": only 1 directional signal
+   - "all_neutral": all 3 neutral / not_applicable
+   - "mixed_conflicting": at least one bullish vs another bearish
 
   2. EARNINGS GATE — applies BEFORE choosing action:
      - If earningsWindow is 'imminent' (0-2 days): force NO_TRADE
@@ -144,7 +167,7 @@ export const synthesizerAgent = new Agent({
   - Be decisive — synthesizer's job is to commit, not equivocate
 `,
 
-  model: 'anthropic/claude-sonnet-4-5',
+  model: "anthropic/claude-sonnet-4-5",
   // No tools — this agent only reasons over text input. That's fine,
   // not every agent needs tools. Pure reasoning agents are common.
 });

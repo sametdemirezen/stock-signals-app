@@ -1,6 +1,6 @@
-import { Agent } from '@mastra/core/agent';
-import { z } from 'zod';
-import { stockNewsTool } from '../tools/stock-news-tool';
+import { Agent } from "@mastra/core/agent";
+import { z } from "zod";
+import { stockNewsTool } from "../tools/stock-news-tool";
 
 /**
  * Output schema for the news sentiment agent.
@@ -11,45 +11,45 @@ import { stockNewsTool } from '../tools/stock-news-tool';
  * `if (output.sentiment === 'bullish')` without worrying about typos.
  */
 export const newsSentimentSchema = z.object({
-  ticker: z.string().describe('The ticker that was analyzed'),
+  ticker: z.string().describe("The ticker that was analyzed"),
 
   sentiment: z
-    .enum(['bullish', 'bearish', 'neutral'])
-    .describe('Overall sentiment derived from the news flow'),
+    .enum(["bullish", "bearish", "neutral"])
+    .describe("Overall sentiment derived from the news flow"),
 
   confidence: z
-  .number()
-  .describe(
-    'How confident this assessment is, on a 0-100 scale. ' +
-      'Use <50 when news is sparse, contradictory, or stale. ' +
-      'Use 50-79 when direction is clear but coverage is limited. ' +
-      'Use 80-100 only with multiple corroborating credible sources.',
-  ),
+    .number()
+    .describe(
+      "How confident this assessment is, on a 0-100 scale. " +
+        "Use <50 when news is sparse, contradictory, or stale. " +
+        "Use 50-79 when direction is clear but coverage is limited. " +
+        "Use 80-100 only with multiple corroborating credible sources.",
+    ),
 
   summary: z
     .string()
     .describe(
-      'A 2-3 sentence summary of the news situation, written in Turkish.',
+      "A 2-3 sentence summary of the news situation, written in Turkish.",
     ),
 
   keyDrivers: z
     .array(z.string())
     .describe(
-      'Concrete, evidence-based bullet points justifying the sentiment ' +
+      "Concrete, evidence-based bullet points justifying the sentiment " +
         '(e.g. "Earnings beat by 12%", "Analyst upgrade by Goldman"). ' +
-        'Written in Turkish. Empty array if no strong drivers.',
+        "Written in Turkish. Empty array if no strong drivers.",
     ),
 
   riskFlags: z
     .array(z.string())
     .describe(
-      'Any concerning signals (lawsuits, guidance cuts, insider selling). ' +
-        'Written in Turkish. Empty array if none.',
+      "Any concerning signals (lawsuits, guidance cuts, insider selling). " +
+        "Written in Turkish. Empty array if none.",
     ),
 
   articlesAnalyzed: z
     .number()
-    .describe('Number of articles considered in this analysis'),
+    .describe("Number of articles considered in this analysis"),
 });
 
 /**
@@ -59,8 +59,8 @@ export const newsSentimentSchema = z.object({
 export type NewsSentiment = z.infer<typeof newsSentimentSchema>;
 
 export const newsSentimentAgent = new Agent({
-  id: 'news-sentiment-agent',
-  name: 'News Sentiment Agent',
+  id: "news-sentiment-agent",
+  name: "News Sentiment Agent",
 
   instructions: `
     You are a financial news analyst specialized in US equities.
@@ -91,6 +91,6 @@ export const newsSentimentAgent = new Agent({
       original form.
   `,
 
-  model: 'anthropic/claude-haiku-4-5',
+  model: "anthropic/claude-haiku-4-5",
   tools: { stockNewsTool },
 });
