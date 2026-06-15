@@ -13,6 +13,7 @@ Format: her karar bir başlık altında. Tarih, neyi neden seçtik, neyi reddett
 **Karar:** Multi-agent framework olarak Mastra v1.x kullanıyoruz.
 
 **Alternatifler:**
+
 - **Vercel AI SDK ham:** Daha düşük seviye, kendi orkestrayonunu yazarsın. Esnek
   ama "agent + tool + memory + observability" stack'ini sıfırdan kurmak gerekir.
 - **LangGraph.js:** State machine modeli, daha steep learning curve. Daha çok
@@ -21,6 +22,7 @@ Format: her karar bir başlık altında. Tarih, neyi neden seçtik, neyi reddett
   senaryomuza fazla geliyor (biz pipeline kuruyoruz, sohbet değil).
 
 **Niye Mastra:**
+
 - TypeScript-native, modern API (Vercel AI SDK üstüne kurulu)
 - Built-in: agent registration, tool framework, structured output, memory,
   observability, Studio UI
@@ -37,11 +39,13 @@ tool execute imzası v0.x'ten v1.x'e değişmişti (`{context}` → `inputData`)
 **Karar:** Tüm agent'lar `anthropic/claude-sonnet-4-5` kullanıyor.
 
 **Alternatifler:**
+
 - **Haiku 4.5:** 10x ucuz, 5x hızlı, ama nuance yakalama zayıf (özellikle
   synthesizer için kritik)
 - **GPT-4 / 4o:** Karşılaştırılabilir kalite, ama bizim için sebep yok değişmek
 
 **Niye Sonnet:**
+
 - Türkçe çıktı kalitesi yüksek (Haiku'da bazen tuhaflıklar oluyor)
 - Structured output desteği yerleşik
 - Tool calling güvenilir
@@ -59,6 +63,7 @@ routing" pattern). Maliyet düşer. Şimdilik ölçmedik, optimize etmiyoruz.
 "AAPL'ı analiz et" deyince hepsine bakar.
 
 **Niye ayrı:**
+
 - Her ajanın tek bir kuralı var, instructions kısa ve net
 - Bir ajan yanlış davranırsa diğerini etkilemiyor (debug kolay)
 - News ve Technical PARALEL çalışabiliyor (`Promise.all`) — 2x hız
@@ -78,6 +83,7 @@ filtreliyoruz, Telegram'a göndermiyoruz.
 **Alternatif:** Tüm sinyalleri gönder, kullanıcı kendi karar versin.
 
 **Niye 65:**
+
 - 80-100 = "iki ajan güçlü hemfikir" → kesin sinyal
 - 65-79 = "hemfikir ama bir tarafta uyarılar var" → değerli
 - < 65 = karışık veya zayıf, gürültü
@@ -90,15 +96,18 @@ Eşik **prompt'tan değil koddan** geliyor (`MIN_CONFLUENCE_SCORE` const'u).
 ## Scanner kriterleri: volume 1.5x VEYA price %2
 
 **Karar:** S&P 500'den top 15 hisse seçerken iki kriter, OR mantığı:
+
 - Volume ratio ≥ 1.5x (20-gün ortalamasına göre)
 - |Daily change| ≥ %2
 
 **Alternatifler:**
+
 - AND mantığı (her ikisi de) — çok az aday çıkar, sakin günlerde 0
 - Daha gevşek (1.2x, %1) — çok aday, gürültü artar
 - 52-week high yakınlığı, gap analizi gibi ek filtreler
 
 **Niye böyle:**
+
 - OR + 1.5x/2% = sakin günlerde 5-10 aday, hareketli günlerde 30+ aday
 - Skor formülü (`volumeRatio × |changePct|`) ikisini birden ödüllendiriyor,
   yani her iki sinyali aynı anda gösteren hisseler en üste çıkıyor
@@ -115,6 +124,7 @@ birleştirip ~25 unique ticker oluşuyor.
 **Alternatifler:** 10 (daha hızlı, az fırsat), 30 (daha çok fırsat, çok yavaş).
 
 **Niye 15:**
+
 - 10 watchlist + 15 scanner ≈ 25 ticker
 - 25 × 3 LLM çağrısı = 75 çağrı
 - Tier 1 rate limit (30k token/dk) ile ~10 dakika
@@ -134,6 +144,7 @@ Anthropic Tier 1 limiti dakikada 30k input token. 5 ticker × 3 çağrı × ~4k
 token = 60k → limit 2x aşılıyor.
 
 **Niye 2:**
+
 - 2 × 3 = 6 çağrı / batch ≈ 24k token, limit altında güvende
 - BATCH_DELAY_MS=25000 ile dakikalık pencere yeniliyor
 
@@ -147,16 +158,19 @@ token = 60k → limit 2x aşılıyor.
 **Karar:** Fiyat için yahoo-finance2 (unofficial), haber için Finnhub free tier.
 
 **Alternatifler:**
+
 - **Polygon.io:** Kalite yüksek, $30/ay, prod-grade
 - **IEX Cloud:** Benzer, fiyat değişti son zamanlarda
 - **Alpaca:** Broker entegre, ücretsiz katmanı var
 
 **Niye Yahoo + Finnhub:**
+
 - İkisi de bedava (Finnhub free tier 60 req/dakika yeter)
 - Setup hızlı (key bile gerekmiyor Yahoo'da)
 - Kalite hobby/öğrenme amaçlı yeterli
 
 **Trade-off:**
+
 - Yahoo unofficial — patlarsa sorumlusu yok
 - Pre-market data zayıf
 - Veri tazeliği gün içinde tutarsız (volume ratio sabah eksik gözüküyor)
@@ -174,6 +188,7 @@ token = 60k → limit 2x aşılıyor.
 olsun" dedin.
 
 **Niye:**
+
 - LLM'ler İngilizce instruction ile daha iyi çalışıyor (eğitim verisi büyük
   çoğunluğu İngilizce)
 - Açık kaynak / paylaşım için İngilizce kod evrensel
@@ -192,6 +207,7 @@ Bu pattern her agent'ta aynı.
 **Alternatifler:** Resmi sayılan `node-telegram-bot-api` paketi.
 
 **Niye raw:**
+
 - Sadece outbound `sendMessage` lazım, polling/webhook yok
 - API endpoint'i çok basit, wrapper hiçbir şey kazandırmıyor
 - Sıfır dependency, paket güncellemelerinde kırılma riski yok
@@ -209,8 +225,9 @@ komutu), polling lazım olur, paket bağlamak doğru olur. Şu an gerekmiyor.
 **Alternatif:** `MarkdownV2`
 
 **Niye HTML:**
-- MarkdownV2'de `_ * [ ] ( ) ~ \`> # + - = | { } . !` hepsini escape etmek
-  gerekiyor. Finansal sinyallerde `+4.32%`, `R:R 1.6`, `Stop: 350.00` her yerde,
+
+- MarkdownV2'de `_ * [ ] ( ) ~ \`> # + - = | { } . !`hepsini escape etmek
+gerekiyor. Finansal sinyallerde`+4.32%`, `R:R 1.6`, `Stop: 350.00` her yerde,
   bir karakter unutursan mesaj **gitmez** (Bad Request)
 - HTML'de sadece `<`, `>`, `&` escape edilmeli — finans verisinde nadir
 - Format gücü aynı (`<b>`, `<i>`, `<code>`)
@@ -224,6 +241,7 @@ komutu), polling lazım olur, paket bağlamak doğru olur. Şu an gerekmiyor.
 **Alternatif:** Her gün Wikipedia veya bir API'den çek.
 
 **Niye statik:**
+
 - S&P 500 yılda ~20 değişir, günlük scrape gereksiz
 - İnternete bağımlılık katmanı + failure mode bir tane daha
 - Hangi hisseleri taradığımızı tam kontrol ediyoruz
@@ -237,11 +255,13 @@ komutu), polling lazım olur, paket bağlamak doğru olur. Şu an gerekmiyor.
 **Karar:** Teknik göstergeler için `trading-signals` paketi.
 
 **Tetikleyici:** İlk başta `technicalindicators` önermiştim, ama bu paket:
+
 - Son güncelleme 2020'den
 - `canvas` adında native dependency gerektiriyor (Linux'ta C derleyici sorunu)
 - Bakımsız, modern TS değil
 
 **Niye trading-signals:**
+
 - TypeScript-native, aktif geliştiriliyor
 - Native bağımlılığı yok
 - Modern API (streaming-friendly)
@@ -257,6 +277,7 @@ v6 sözdizimi gösteriyor olabilir, `.d.ts` dosyasına bak.
 **Karar:** Tüm secret'lar ve user-specific config `.env`'de.
 
 **Niye:**
+
 - Standart Node.js convention
 - `.gitignore`'da, asla repo'ya gitmez
 - Production deployment'larda (GitHub Actions, VPS) doğal eşleşme
@@ -274,5 +295,50 @@ Bu projede karar verirken sürekli sorduğumuz üç soru:
    (try/catch per ticker, graceful telegram fallback, vs.)
 3. **"Senior dev refleksi nedir?"** — `.d.ts` dosyasına bak, hata mesajını
    oku, tahmin yapma — gözle gör
+
+---
+
+## Earnings: directional oydan filtreye indirildi \*
+
+**Tarih:** [15/06/2026]
+
+**Karar:** Earnings agent artık alignment/confluence hesabına directional
+bir "üçüncü oy" olarak GİRMİYOR. Sadece iki rolü var:
+
+1. Timing vetosu: earningsWindow === 'imminent' (0-2 gün) → action NO_TRADE
+2. Kalite ayarı: qualityScore < 40 → confluence -10; qualityScore >= 80 → +5
+
+Alignment artık sadece **news + technical** üzerinden hesaplanıyor
+(`computeAlignment`, 2-yönlü: both_aligned / one_directional /
+both_neutral / conflicting). meanConfidence de sadece bu iki ajanın
+directional skorlarından.
+
+**Eski durum:** Earnings 3 kanaldan karara giriyordu — alignment'ta
+üçüncü yön oyu, meanConfidence ortalamasında qualityScore, ve gate.
+preEarningsSetup "bullish/bearish" değeri news'in "bullish" değeriyle
+eşit ağırlık alıyordu.
+
+**Neden değiştirildi:**
+
+- Earnings bir YÖN sinyali değil, bir RİSK/ZAMANLAMA faktörüdür.
+  "Earnings yaklaşıyor" hissenin yukarı mı aşağı mı gideceğini söylemez,
+  "belirsizlik var" der.
+- Geçmiş beat streak gelecek çeyreğin yönünü tahmin etmez — piyasa
+  geçmiş performansı zaten fiyatlamıştır ("buy the rumor, sell the news").
+- preEarningsSetup'ı directional oy saymak, kanıtsız bir ağırlıktı.
+  Earnings'i "üçüncü analist" gibi kullanmak kategori hatasıydı.
+- Kullanıcının orijinal niyeti zaten "yakın earnings varsa DİKKAT et"
+  idi — yani uyarı/filtre, oy değil. Tasarım bu niyete döndürüldü.
+
+**Karşı-argüman (kayda değer):** Bazı stratejiler pre-earnings momentum'u
+gerçek bir directional sinyal olarak kullanır (beat streak + yukarı
+momentum → earnings öncesi alım, gap-up beklentisi). Bu agresif, yüksek
+riskli bir oyun ve kullanıcının pullback-buy odaklı stratejisine uymuyor.
+Ayrıca backtest olmadan işe yaradığı bilinemez. İleride backtest motoru
+kurulduğunda earnings-as-signal ayrıca test edilebilir.
+
+**earningsContext:** Telegram mesajında bilgi amaçlı GÖSTERİLMEYE devam
+ediyor (kullanıcı "earnings 5 gün sonra" görsün diye). Karar vermiyor,
+sadece bilgilendiriyor.
 
 Bu prensipler proje boyunca geri dönüyor. Yeni karar verirken sor.

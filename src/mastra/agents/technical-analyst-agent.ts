@@ -83,25 +83,48 @@ export const technicalAnalystAgent = new Agent({
     get-technical-analysis tool, then produce a structured setup
     assessment.
 
-    Setup classification rules:
+    Setup classification rules — evaluate REGIME first, then setup:
 
-    BULLISH setup (look for these in combination):
-    - Price above SMA50, with SMA20 > SMA50 (alignment)
-    - RSI between 40 and 65 (momentum present, not overbought)
-    - MACD histogram positive and rising
-    - Volume ratio > 1.0 (above-average interest)
-    - 5-day change positive but under 15% (not parabolic)
+    STEP 1 — Determine the long-term REGIME:
+    - priceVsSma200Pct > 0: UPTREND regime (long-term trend intact)
+    - priceVsSma200Pct < 0: DOWNTREND regime
+    A dip in an uptrend is a pullback (opportunity); the same dip in a
+    downtrend is continuation (danger).
 
-    BEARISH setup:
-    - Price below SMA50, with SMA20 < SMA50
-    - RSI > 70 (overbought, mean-reversion risk) OR MACD bearish cross
-    - Volume ratio elevated alongside falling price (panic)
+    STEP 2 — Classify the setup:
 
-    AVOID (return neutral):
-    - RSI > 80: parabolic, late to the move
-    - Volume ratio < 0.5: insufficient liquidity
-    - |1-day change| > 10%: too volatile for swing
-    - Conflicting signals across indicators
+    BULLISH — trend continuation:
+    - Uptrend regime, price above SMA50, SMA20 > SMA50
+    - RSI between 45 and 65 (momentum present, not overbought)
+    - MACD histogram positive
+    - Volume ratio > 1.0
+
+    BULLISH — pullback-buy (THE highest-value setup; catches stocks
+    before they resume rising). ALL of these must hold:
+    - Uptrend regime (priceVsSma200Pct > 0)
+    - SMA20 > SMA50 (moving averages still bullishly aligned)
+    - Price pulled back to or below SMA20 (temporary weakness)
+    - pctFrom20dHigh between -3 and -15 (resting, not broken down)
+    - RSI between 35 and 55 (cooled off, not collapsing)
+    - PLUS at least ONE stabilization sign:
+        * 1-day change positive (today green after red days), OR
+        * price holding above recent5dLow (support intact), OR
+        * RSI turning back up from oversold
+    If price is still in free-fall (1-day change < -3% AND MACD histogram
+    below -2), do NOT call it bullish. Classify NEUTRAL and note in the
+    rationale: "uptrend pullback, waiting for stabilization."
+
+    BEARISH — requires REAL trend damage, not just a dip:
+    - Price below SMA50 AND SMA20 < SMA50 (averages crossed down), OR
+    - Downtrend regime (priceVsSma200Pct < 0) with falling momentum
+    CRITICAL: do NOT classify bearish merely because price dipped below
+    SMA50 while SMA20 > SMA50 and regime is up. That is a PULLBACK in an
+    uptrend, not a downtrend. Misreading pullbacks as bearish is the
+    single most common mistake — avoid it.
+
+    NEUTRAL:
+    - Conflicting signals, RSI > 80 (parabolic), volume ratio < 0.5,
+      |1-day change| > 10%, or a pullback that hasn't stabilized yet.
 
     Score calibration:
     - 80-100: 4+ aligned bullish/bearish indicators, clean trend

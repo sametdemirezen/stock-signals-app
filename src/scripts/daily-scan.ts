@@ -66,30 +66,65 @@ async function analyzeTicker(ticker: string): Promise<FinalSignal | null> {
     if (techResult.object.setup !== "neutral") {
       confidenceValues.push(techResult.object.score);
     }
-    if (
-      earningsResult.object.preEarningsSetup !== "neutral" &&
-      earningsResult.object.preEarningsSetup !== "not_applicable"
-    ) {
-      confidenceValues.push(earningsResult.object.qualityScore);
-    }
+
     const meanConfidence =
       confidenceValues.length > 0
         ? confidenceValues.reduce((a, b) => a + b, 0) / confidenceValues.length
         : 0;
+    const alignment = computeAlignment(
+      newsResult.object.sentiment,
+      techResult.object.setup,
+    );
 
     console.log(`  action: ${synthResult.object.action}`);
-    console.log(`  alignment: ${synthResult.object.agentAlignment}`);
     console.log(`  mean confidence (computed): ${meanConfidence.toFixed(1)}`);
     console.log(
       `  LLM confluence (will be overwritten): ${synthResult.object.confluenceScore}`,
     );
 
-    const enforced = enforceTradeRules(synthResult.object, meanConfidence);
+    const enforced = enforceTradeRules(
+      synthResult.object,
+      alignment,
+      meanConfidence,
+      earningsResult.object.earningsWindow,
+      earningsResult.object.qualityScore,
+    );
     return enforced;
   } catch (err) {
     console.error(`  ✗ ${ticker} failed:`, (err as Error).message);
     return null;
   }
+}
+
+/**
+ * Compute alignment deterministically from news + technical directions.
+ *
+ * Earnings is deliberately EXCLUDED here — it is not a directional
+ * signal. Earnings affects the decision only as a timing veto and a
+ * quality adjustment (applied separately in enforceTradeRules).
+ *
+ * Treating earnings "pre-earnings setup" as a third directional vote
+ * over-weighted it: past beat history doesn't predict next-quarter
+ * direction (the market has already priced it). So alignment rests on
+ * the two genuinely directional agents: news and technical.
+ */
+type TwoWayAlignment =
+  | "both_aligned"
+  | "one_directional"
+  | "both_neutral"
+  | "conflicting";
+
+function computeAlignment(
+  newsSentiment: "bullish" | "bearish" | "neutral",
+  techSetup: "bullish" | "bearish" | "neutral",
+): TwoWayAlignment {
+  const directions = [newsSentiment, techSetup].filter((d) => d !== "neutral");
+
+  if (directions.length === 0) return "both_neutral";
+  if (directions.length === 1) return "one_directional";
+
+  // Both directional — same way or opposed?
+  return directions[0] === directions[1] ? "both_aligned" : "conflicting";
 }
 
 /**
@@ -103,26 +138,29 @@ async function analyzeTicker(ticker: string): Promise<FinalSignal | null> {
  * meanConfidence, NOT by the LLM. Same inputs always produce the same
  * score, run to run.
  */
+/**
+ * Confluence score from two-way alignment + mean confidence.
+ * Lookup table tuned so MIN_CONFLUENCE_SCORE=65 admits:
+ *   - both_aligned + strong/moderate
+ * and rejects single-agent or conflicting setups.
+ */
 function computeConfluenceScore(
-  alignment: FinalSignal["agentAlignment"],
+  alignment: TwoWayAlignment,
   meanConfidence: number,
 ): number {
-  const confidence: "strong" | "moderate" | "weak" =
+  const band: "strong" | "moderate" | "weak" =
     meanConfidence > 70 ? "strong" : meanConfidence >= 50 ? "moderate" : "weak";
 
-  const table: Record<
-    FinalSignal["agentAlignment"],
-    Record<"strong" | "moderate" | "weak", number>
-  > = {
-    all_three_aligned: { strong: 90, moderate: 75, weak: 60 },
-    two_directional_one_neutral: { strong: 75, moderate: 65, weak: 50 },
-    one_directional_two_neutral: { strong: 50, moderate: 40, weak: 30 },
-    all_neutral: { strong: 35, moderate: 30, weak: 25 },
-    mixed_conflicting: { strong: 20, moderate: 15, weak: 10 },
+  const table: Record<TwoWayAlignment, Record<typeof band, number>> = {
+    both_aligned: { strong: 90, moderate: 72, weak: 55 },
+    one_directional: { strong: 50, moderate: 40, weak: 30 },
+    both_neutral: { strong: 25, moderate: 20, weak: 15 },
+    conflicting: { strong: 20, moderate: 15, weak: 10 },
   };
 
-  return table[alignment][confidence];
+  return table[alignment][band];
 }
+
 /**
  * Post-process the synthesizer's output to enforce deterministic rules.
  *
@@ -133,16 +171,33 @@ function computeConfluenceScore(
  */
 function enforceTradeRules(
   signal: FinalSignal,
+  alignment: TwoWayAlignment,
   meanConfidence: number,
+  earningsWindow: string,
+  earningsQualityScore: number,
 ): FinalSignal {
-  // Recompute confluence deterministically.
-  const computedConfluence = computeConfluenceScore(
-    signal.agentAlignment,
-    meanConfidence,
-  );
-  signal = { ...signal, confluenceScore: computedConfluence };
-  // Only need post-processing for actionable signals.
-  // NO_TRADE doesn't have entry/stop/target to validate.
+  // 1. Earnings timing veto — imminent earnings kills new positions.
+  if (earningsWindow === "imminent") {
+    return {
+      ...signal,
+      action: "NO_TRADE",
+      thesis:
+        signal.thesis + " [NO_TRADE: earnings imminent, gap risk too high.]",
+      entry: null,
+      stopLoss: null,
+      target: null,
+      riskRewardRatio: null,
+      horizon: null,
+      confluenceScore: computeConfluenceScore(alignment, meanConfidence),
+    };
+  }
+  // 2. Confluence from code, with earnings quality adjustment.
+  let confluence = computeConfluenceScore(alignment, meanConfidence);
+  if (earningsQualityScore < 40) confluence -= 10;
+  else if (earningsQualityScore >= 80) confluence += 5;
+  signal = { ...signal, confluenceScore: confluence };
+
+  // (geri kalan: NO_TRADE check, entry/stop validation, target hesabı — AYNEN KALIYOR)
   if (signal.action === "NO_TRADE") {
     return signal;
   }
