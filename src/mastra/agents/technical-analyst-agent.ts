@@ -1,6 +1,6 @@
-import { Agent } from '@mastra/core/agent';
-import { z } from 'zod';
-import { technicalAnalysisTool } from '../tools/technical-analysis-tool';
+import { Agent } from "@mastra/core/agent";
+import { z } from "zod";
+import { technicalAnalysisTool } from "../tools/technical-analysis-tool";
 
 /**
  * Output schema for the technical analyst agent.
@@ -13,23 +13,31 @@ export const technicalAnalysisSchema = z.object({
   ticker: z.string(),
 
   setup: z
-    .enum(['bullish', 'bearish', 'neutral'])
-    .describe('Overall swing-trade setup based on indicators'),
+    .enum(["bullish", "bearish", "neutral"])
+    .describe("Overall swing-trade setup based on indicators"),
 
   score: z
     .number()
     .describe(
-      'Quality of the setup on a 0-100 scale. ' +
-        '0-49: weak or conflicting signals. ' +
-        '50-79: clear setup but with some caveats. ' +
-        '80-100: strong, multiple confirmations aligned.',
+      "Quality of the setup on a 0-100 scale. " +
+        "0-49: weak or conflicting signals. " +
+        "50-79: clear setup but with some caveats. " +
+        "80-100: strong, multiple confirmations aligned.",
     ),
 
   rationale: z
     .string()
     .describe(
-      'A 2-3 sentence explanation in Turkish referencing the actual ' +
-        'indicator values that drove the conclusion.',
+      "A 2-3 sentence explanation in Turkish referencing the actual " +
+        "indicator values that drove the conclusion.",
+    ),
+
+  entry: z
+    .number()
+    .nullable()
+    .describe(
+      "Single entry price (midpoint of entryZone). Null if no trade plan. " +
+        "This is the official entry for R:R calculations.",
     ),
 
   entryZone: z
@@ -39,24 +47,24 @@ export const technicalAnalysisSchema = z.object({
     })
     .nullable()
     .describe(
-      'Suggested entry price range. Null if no clear setup ' +
-        '(e.g., setup is neutral).',
+      "Suggested entry price range. Null if no clear setup " +
+        "(e.g., setup is neutral).",
     ),
 
   stopLoss: z
     .number()
     .nullable()
-    .describe('Suggested stop-loss price. Null if no clear setup.'),
+    .describe("Suggested stop-loss price. Null if no clear setup."),
 
   target: z
     .number()
     .nullable()
-    .describe('Suggested first target price. Null if no clear setup.'),
+    .describe("Suggested first target price. Null if no clear setup."),
 
   keyObservations: z
     .array(z.string())
     .describe(
-      'Bullet observations citing specific indicator values, in Turkish. ' +
+      "Bullet observations citing specific indicator values, in Turkish. " +
         'E.g. "RSI 62, momentum saglikli" or "Price 4% above SMA50".',
     ),
 });
@@ -64,8 +72,8 @@ export const technicalAnalysisSchema = z.object({
 export type TechnicalAnalysis = z.infer<typeof technicalAnalysisSchema>;
 
 export const technicalAnalystAgent = new Agent({
-  id: 'technical-analyst-agent',
-  name: 'Technical Analyst Agent',
+  id: "technical-analyst-agent",
+  name: "Technical Analyst Agent",
 
   instructions: `
     You are a technical analyst specialized in US equity swing trading
@@ -101,11 +109,35 @@ export const technicalAnalystAgent = new Agent({
     - 0-49: mixed signals, choppy, or "wait" zones
 
     Entry / stop / target rules (only when setup is bullish or bearish):
-    - Bullish entry zone: from current price down to SMA20
-    - Bullish stop: 2-3% below SMA50, or recent swing low
-    - Bullish target: previous high, or 2:1 reward-to-risk vs the stop
-    - For bearish setups, mirror these (short setups)
-    - If setup is neutral, set entryZone, stopLoss, target all to null
+
+    BULLISH SETUPS:
+    - Entry (single price): midpoint between current price and SMA20.
+        If price is below SMA20 (pullback), entry = current price.
+        Set the 'entry' field to this single number.
+        Also set entryZone spanning roughly ±1.5% around entry.
+    - Stop: take the TIGHTEST of these three candidates (closest to entry):
+      (a) recent5dLow (structural support — if broken, momentum shifted)
+      (b) SMA20 minus 1% (medium-term momentum line)
+      (c) entry minus (1.5 × atr14) (volatility-based, accounts for noise)
+      This produces a stop that respects the stock's normal volatility
+      but isn't unnecessarily generous.
+    - Target: leave the 'target' field as null. The system computes the
+      target in code as entry + (2 × risk) to guarantee a consistent
+      2.0 reward-to-risk. Do NOT set a target yourself.
+    - Validation: before returning, verify:
+        entry > stop (geometry valid for BUY)
+        entry - stop > 0 (positive risk)
+      If the geometry fails, keep the directional setup but set entry,
+      entryZone, stopLoss, target all to null.
+
+    BEARISH SETUPS (mirror logic for short ideas):
+    - Entry: midpoint between current price and SMA20 going up.
+    - Stop: take the closest of (a) SMA20 plus 1%, (b) entry plus
+      (1.5 × atr14).
+    - Target: leave null. System computes it as entry - (2 × risk).
+
+    NEUTRAL SETUPS:
+    - All trade plan fields null. Don't try to construct a plan.
 
     Hard rules:
     - Always cite specific indicator values in keyObservations
@@ -115,6 +147,6 @@ export const technicalAnalystAgent = new Agent({
       indicator names (RSI, MACD, SMA50) in their original form
   `,
 
-  model: 'anthropic/claude-haiku-4-5',
+  model: "anthropic/claude-haiku-4-5",
   tools: { technicalAnalysisTool },
 });

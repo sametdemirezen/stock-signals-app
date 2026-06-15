@@ -77,21 +77,14 @@ async function analyzeTicker(ticker: string): Promise<FinalSignal | null> {
         ? confidenceValues.reduce((a, b) => a + b, 0) / confidenceValues.length
         : 0;
 
-    console.log(`\n[DEBUG ${ticker}] Synthesizer raw output:`);
     console.log(`  action: ${synthResult.object.action}`);
     console.log(`  alignment: ${synthResult.object.agentAlignment}`);
     console.log(`  mean confidence (computed): ${meanConfidence.toFixed(1)}`);
     console.log(
       `  LLM confluence (will be overwritten): ${synthResult.object.confluenceScore}`,
     );
-    console.log(`  entry: ${synthResult.object.entry}`);
-    console.log(`  stopLoss: ${synthResult.object.stopLoss}`);
-    console.log(`  target: ${synthResult.object.target}`);
-    console.log(`  R:R (LLM): ${synthResult.object.riskRewardRatio}`);
+
     const enforced = enforceTradeRules(synthResult.object, meanConfidence);
-    console.log(
-      `  → after enforce: ${enforced.action}, confluence: ${enforced.confluenceScore}, R:R: ${enforced.riskRewardRatio}`,
-    );
     return enforced;
   } catch (err) {
     console.error(`  ✗ ${ticker} failed:`, (err as Error).message);
@@ -154,16 +147,17 @@ function enforceTradeRules(
     return signal;
   }
 
-  const { entry, stopLoss, target } = signal;
+  const { entry, stopLoss } = signal;
 
-  // If any of the three is missing, we can't compute R:R — kill the trade.
-  if (entry === null || stopLoss === null || target === null) {
+  // Entry and stop are required. Target is computed below, so we don't
+  // require it from the LLM anymore.
+  if (entry === null || stopLoss === null) {
     return {
       ...signal,
       action: "NO_TRADE",
       thesis:
         signal.thesis +
-        " [Auto-downgraded to NO_TRADE: incomplete trade plan.]",
+        " [Auto-downgraded to NO_TRADE: missing entry or stop.]",
       entry: null,
       stopLoss: null,
       target: null,
@@ -172,15 +166,37 @@ function enforceTradeRules(
     };
   }
 
+  // Compute risk from entry and stop based on direction.
+  const risk = signal.action === "BUY" ? entry - stopLoss : stopLoss - entry;
+
+  // Risk must be positive — otherwise geometry is invalid.
+  if (risk <= 0) {
+    return {
+      ...signal,
+      action: "NO_TRADE",
+      thesis:
+        signal.thesis +
+        " [Auto-downgraded to NO_TRADE: invalid trade geometry.]",
+      entry: null,
+      stopLoss: null,
+      target: null,
+      riskRewardRatio: null,
+      horizon: null,
+    };
+  }
+
+  // Compute target deterministically: 2R from entry.
+  // This GUARANTEES R:R = 2.0 — no LLM arithmetic involved.
+  const target = signal.action === "BUY" ? entry + 2 * risk : entry - 2 * risk;
+
   // Compute R:R deterministically based on direction.
   // BUY: profit when price goes up (target > entry > stop)
   // SELL: profit when price goes down (target < entry < stop)
   const reward = signal.action === "BUY" ? target - entry : entry - target;
-  const risk = signal.action === "BUY" ? entry - stopLoss : stopLoss - entry;
 
-  // Sanity check: risk must be positive and non-zero.
+  // Sanity check: reward must be positive and non-zero.
   // If not, the trade plan is geometrically invalid.
-  if (risk <= 0 || reward <= 0) {
+  if (reward <= 0) {
     return {
       ...signal,
       action: "NO_TRADE",
@@ -210,6 +226,7 @@ function enforceTradeRules(
   // had it slightly wrong.
   return {
     ...signal,
+    target,
     riskRewardRatio: computedRR,
   };
 }
@@ -220,7 +237,7 @@ async function main() {
   console.log("══════════════════════════════════════════\n");
 
   // === MODE: pick one, comment the other ===
-  //const scanList = await buildScanList({ scannerTopN: 15 });           // FULL: watchlist + S&P 500 scanner (~10 min)
+  //const scanList = await buildScanList({ scannerTopN: 15 }); // FULL: watchlist + S&P 500 scanner (~10 min)
   const scanList = await buildScanList({ skipScanner: true }); // FAST: watchlist only (~3-4 min)
   //&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&TESTING SLICE &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
   const tickers = scanList.combined;

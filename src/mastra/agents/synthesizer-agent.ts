@@ -134,12 +134,14 @@ export const synthesizerAgent = new Agent({
   4. Pick action AFTER gates:
      - confluenceScore >= 65 AND directional alignment + gates pass: BUY or SELL
      - Otherwise: NO_TRADE
-     - If risk/reward < 1.5, force NO_TRADE regardless
 
   5. Trade plan (BUY/SELL only):
      - Use technical.entryZone midpoint as 'entry'
      - Use technical.stopLoss
-     - Use technical.target
+     - entry: use technical's entry value
+     - stopLoss: use technical's stopLoss value
+     - target: leave null — the system computes it in code as 2R
+     - Do not compute riskRewardRatio yourself — the system sets it
      - For 'approaching' earnings, suggest tighter stop (closer to entry)
      - Compute riskRewardRatio = (target - entry) / (entry - stop)
      - For NO_TRADE: all trade fields null
@@ -165,6 +167,11 @@ export const synthesizerAgent = new Agent({
   - Never invent direction. If sub-agents disagree strongly, NO_TRADE
   - Do NOT add disclaimers like "this is not financial advice"
   - Be decisive — synthesizer's job is to commit, not equivocate
+  - Do NOT mention the confluence score (or any specific confluence
+    number) in the thesis. The confluence score is computed in code
+    and may differ from any number you have in mind. Describe the
+    strength of the setup qualitatively instead (e.g. "güçlü uyum",
+    "zayıf sinyal", "karışık görünüm") without citing a number.
 `,
 
   model: "anthropic/claude-sonnet-4-5",
